@@ -1,0 +1,39 @@
+# Email Confirmation Setup for Supabase
+
+To ensure email confirmations are working properly, follow these steps in your Supabase project:
+
+## 1. Enable Email Confirmations in Authentication Settings
+
+1. Go to your Supabase Dashboard: https://app.supabase.com
+2. Select your project
+3. Navigate to Authentication → Settings → Email
+4. Make sure "Enable email confirmations" is toggled ON
+5. Save changes
+
+## 2. Configure Email Templates (Optional)
+
+While in the Authentication settings:
+1. Go to Email Templates
+2. Customize the "Confirm signup" template to match your branding
+3. Make sure the template has a clear call to action
+
+## 3. Configure SMTP Settings (for Production)
+
+For production environments, configure SMTP:
+1. Go to Authentication → Settings → SMTP
+2. Enter your SMTP credentials
+3. Test the configuration
+
+## Troubleshooting
+
+If email confirmations aren't being sent:
+
+1. Check your browser console for auth errors
+2. Verify that your SMTP settings are correct
+3. Check the Supabase logs in the Dashboard
+4. For development, you can view emails in the Supabase Dashboard under Authentication → Users
+
+If you've enabled email confirmations but want to bypass them for testing:
+1. Go to Authentication → Settings → Email
+2. Temporarily disable "Enable email confirmations"
+3. Remember to re-enable for production 

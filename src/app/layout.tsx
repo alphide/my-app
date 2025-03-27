@@ -2,12 +2,13 @@ import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
 import './globals.css'
 import { AuthProvider } from '@/contexts/AuthContext'
+import { NotificationProvider } from '@/contexts/NotificationContext'
 
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'Vett - Dating Profile Reviewer',
-  description: 'Get your dating profile reviewed by real women',
+  title: 'Vett - Dating Profile Reviews',
+  description: 'Get honest feedback on your dating profiles',
 }
 
 export default function RootLayout({
@@ -19,9 +20,11 @@ export default function RootLayout({
     <html lang="en">
       <body className={inter.className}>
         <AuthProvider>
-          <main>
-            {children}
-          </main>
+          <NotificationProvider>
+            <main>
+              {children}
+            </main>
+          </NotificationProvider>
         </AuthProvider>
       </body>
     </html>

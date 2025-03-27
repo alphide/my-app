@@ -13,16 +13,26 @@ export default function SignupPage() {
   const [error, setError] = useState('');
   const [isVerificationSent, setIsVerificationSent] = useState(false);
   const [timeLeft, setTimeLeft] = useState(0);
+  const [verificationEmail, setVerificationEmail] = useState('');
   const { signUp, signInWithGoogle, signInWithMicrosoft, user } = useAuth();
   const router = useRouter();
   const supabase = createClientComponentClient();
 
   useEffect(() => {
-    if (user) {
-      console.log('User authenticated, redirecting to dashboard...');
+    // Check if verification was previously sent but user refreshed the page
+    const verificationSent = localStorage.getItem('verificationSent') === 'true';
+    const storedEmail = localStorage.getItem('verificationEmail');
+    
+    if (verificationSent && storedEmail) {
+      setIsVerificationSent(true);
+      setVerificationEmail(storedEmail);
+      setEmail(storedEmail);
+    }
+    
+    if (user && !isVerificationSent) {
       router.push('/dashboard');
     }
-  }, [user, router]);
+  }, [user, router, isVerificationSent, verificationEmail]);
 
   useEffect(() => {
     if (timeLeft > 0) {
@@ -35,6 +45,13 @@ export default function SignupPage() {
 
   const handleEmailSignup = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError('');
+    
+    // Password validation
+    if (password.length < 6) {
+      setError('Password must be at least 6 characters');
+      return;
+    }
     
     if (password !== confirmPassword) {
       setError('Passwords do not match');
@@ -42,8 +59,21 @@ export default function SignupPage() {
     }
 
     try {
-      await signUp(email, password);
-      router.push('/dashboard');
+      const result = await signUp(email, password);
+      
+      // Check if email confirmation is required
+      if (result?.user && !result.session) {
+        // Email confirmation required, show verification screen
+        setIsVerificationSent(true);
+        // Store verification status in localStorage to persist across refreshes
+        localStorage.setItem('verificationSent', 'true');
+        localStorage.setItem('verificationEmail', email);
+      } else if (result?.session) {
+        // User is already confirmed and logged in, redirect to dashboard
+        localStorage.removeItem('verificationSent');
+        localStorage.removeItem('verificationEmail');
+        router.push('/dashboard');
+      }
     } catch (error: any) {
       setError(error.message);
     }
@@ -81,7 +111,7 @@ export default function SignupPage() {
     try {
       const { data, error } = await supabase.auth.resend({
         type: 'signup',
-        email: email
+        email: verificationEmail || email
       });
 
       if (error) throw error;
@@ -111,7 +141,7 @@ export default function SignupPage() {
               Check your email
             </h2>
             <p className="mt-2 text-center text-sm text-gray-600">
-              We've sent a verification link to {email}
+              We've sent a verification link to {verificationEmail || email}
             </p>
           </div>
           

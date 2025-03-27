@@ -1,9 +1,12 @@
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
+import { createClient } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
 import { NextRequest, NextResponse } from 'next/server';
 
 export async function POST(request: NextRequest) {
   try {
+    // Get the authentication token from the request headers
+    const authToken = request.headers.get('Authorization')?.replace('Bearer ', '');
     const { userId, email, role } = await request.json();
     
     if (!userId || !email || !role) {
@@ -27,20 +30,65 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    // Create a server-side Supabase client
-    const supabase = createRouteHandlerClient({ cookies });
+    // Create a Supabase client
+    const cookieStore = cookies();
+    const supabase = createRouteHandlerClient({ cookies: () => cookieStore });
     
-    // Get the current session to verify authentication
-    const { data: { session } } = await supabase.auth.getSession();
+    // Verify the user is authenticated - try both methods
+    let session;
     
-    if (!session || session.user.id !== userId) {
-      return NextResponse.json(
-        { 
-          error: 'Unauthorized',
-          message: 'You must be logged in and can only update your own role'
-        },
-        { status: 401 }
+    if (authToken) {
+      // If auth token is provided, create a client with it
+      const supabaseWithToken = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL || '',
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '',
+        {
+          global: {
+            headers: {
+              Authorization: `Bearer ${authToken}`,
+            },
+          },
+        }
       );
+      
+      const { data, error } = await supabaseWithToken.auth.getUser();
+      if (error || !data.user || data.user.id !== userId) {
+        return NextResponse.json(
+          { 
+            error: 'Unauthorized',
+            message: 'Invalid authentication token or user mismatch'
+          },
+          { status: 401 }
+        );
+      }
+      
+      // Valid user with token
+      session = { user: data.user };
+    } else {
+      // Try with cookies
+      const { data: { session: cookieSession }, error: sessionError } = await supabase.auth.getSession();
+      
+      if (sessionError || !cookieSession) {
+        return NextResponse.json(
+          { 
+            error: 'Unauthorized',
+            message: 'You must be logged in to perform this action'
+          },
+          { status: 401 }
+        );
+      }
+      
+      if (cookieSession.user.id !== userId) {
+        return NextResponse.json(
+          { 
+            error: 'Forbidden',
+            message: 'You can only update your own role'
+          },
+          { status: 403 }
+        );
+      }
+      
+      session = cookieSession;
     }
     
     // First check if the user already exists
@@ -52,6 +100,13 @@ export async function POST(request: NextRequest) {
       
     if (checkError) {
       console.error('Error checking if user exists:', checkError);
+      return NextResponse.json(
+        { 
+          error: 'Database error',
+          message: 'Error checking user record'
+        },
+        { status: 500 }
+      );
     }
     
     let operation;
@@ -62,7 +117,6 @@ export async function POST(request: NextRequest) {
         .from('users')
         .update({
           role: role,
-          updated_at: new Date().toISOString(),
         })
         .eq('id', userId);
     } else {
@@ -74,8 +128,7 @@ export async function POST(request: NextRequest) {
           id: userId,
           email: email,
           role: role,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
+          password_hash: 'auth_managed' // Auth handles the real password
         });
     }
     
@@ -93,7 +146,7 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, role });
   } catch (error: any) {
     console.error('Unexpected error in set-user-role API route:', error);
     return NextResponse.json(

@@ -15,6 +15,10 @@ function LoginContent() {
   const searchParams = useSearchParams();
 
   useEffect(() => {
+    // Clear any verification status when login page is accessed
+    localStorage.removeItem('verificationSent');
+    localStorage.removeItem('verificationEmail');
+    
     if (user) {
       console.log('User authenticated, redirecting...');
       // Check for redirect parameter

@@ -5,20 +5,27 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import Link from 'next/link';
+import Image from 'next/image';
+
+interface UserProfile {
+  id: string;
+  display_name: string;
+  username: string;
+  email: string;
+  role: string;
+  created_at: string;
+}
 
 export default function ProfileSettings() {
   const { user, signOut } = useAuth();
   const router = useRouter();
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [userRole, setUserRole] = useState<string | null>(null);
-  const [userProfile, setUserProfile] = useState({
-    displayName: '',
-    email: user?.email || '',
-    bio: '',
-  });
-  const [successMessage, setSuccessMessage] = useState('');
-  const [errorMessage, setErrorMessage] = useState('');
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [displayName, setDisplayName] = useState('');
+  const [username, setUsername] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
 
   useEffect(() => {
     if (!user) {
@@ -26,115 +33,108 @@ export default function ProfileSettings() {
       return;
     }
 
-    const fetchUserData = async () => {
+    const fetchUserProfile = async () => {
       try {
-        // First check localStorage for role as a fast source
-        const localRole = localStorage.getItem('preferredRole');
-        if (localRole === 'submitter' || localRole === 'reviewer') {
-          setUserRole(localRole);
-        }
-        
-        // Then fetch the user data from the database (without using .single())
         const { data, error } = await supabase
           .from('users')
-          .select('*')
-          .eq('id', user.id);
+          .select('id, display_name, username, email, role, created_at')
+          .eq('id', user.id)
+          .single();
 
         if (error) {
-          console.error('Error fetching user data:', error);
+          console.error('Error fetching user profile:', error);
           return;
         }
 
-        // Check if we got any data
-        if (data && data.length > 0) {
-          const userData = data[0];
-          setUserRole(userData.role);
-          setUserProfile({
-            displayName: userData.display_name || '',
-            email: user.email || '',
-            bio: userData.bio || '',
-          });
-          
-          // Update localStorage
-          if (userData.role) {
-            localStorage.setItem('preferredRole', userData.role);
-          }
-        } else {
-          console.log('No user data found, using defaults');
+        if (data) {
+          setProfile(data);
+          setDisplayName(data.display_name || '');
+          setUsername(data.username || '');
         }
       } catch (error) {
-        console.error('Error in fetchUserData:', error);
+        console.error('Error:', error);
       } finally {
         setLoading(false);
       }
     };
 
-    fetchUserData();
+    fetchUserProfile();
   }, [user, router]);
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    const { name, value } = e.target;
-    setUserProfile(prev => ({
-      ...prev,
-      [name]: value
-    }));
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setSaving(true);
-    setSuccessMessage('');
-    setErrorMessage('');
+    setIsSaving(true);
+    setError('');
+    setSuccess('');
+
+    if (!displayName.trim()) {
+      setError('Display name is required');
+      setIsSaving(false);
+      return;
+    }
+
+    if (!username.trim()) {
+      setError('Username is required');
+      setIsSaving(false);
+      return;
+    }
+
+    if (!/^[a-zA-Z0-9_]+$/.test(username)) {
+      setError('Username can only contain letters, numbers, and underscores');
+      setIsSaving(false);
+      return;
+    }
 
     try {
-      // First check if the user already exists
-      const { data: existingUser, error: checkError } = await supabase
+      // Check if the username is already taken by another user
+      if (username !== profile?.username) {
+        const { data: existingUser, error: checkError } = await supabase
+          .from('users')
+          .select('id')
+          .eq('username', username.toLowerCase())
+          .neq('id', user?.id || '')
+          .single();
+
+        if (existingUser) {
+          setError('Username is already taken. Please choose another one.');
+          setIsSaving(false);
+          return;
+        }
+
+        if (checkError && checkError.code !== 'PGRST116') { // PGRST116 means no rows returned, which is what we want
+          throw checkError;
+        }
+      }
+
+      // Update user information
+      const { error: updateError } = await supabase
         .from('users')
-        .select('id')
-        .eq('id', user?.id);
-        
-      if (checkError) {
-        console.error('Error checking if user exists:', checkError);
-        throw checkError;
+        .update({
+          display_name: displayName.trim(),
+          username: username.trim().toLowerCase(),
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', user?.id || '');
+
+      if (updateError) {
+        throw updateError;
       }
+
+      setSuccess('Profile updated successfully!');
       
-      let operation;
-      if (existingUser && existingUser.length > 0) {
-        // Update existing user
-        operation = supabase
-          .from('users')
-          .update({
-            display_name: userProfile.displayName,
-            bio: userProfile.bio,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', user?.id);
-      } else {
-        // Insert new user with the role from localStorage
-        const role = localStorage.getItem('preferredRole') || 'submitter';
-        operation = supabase
-          .from('users')
-          .insert({
-            id: user?.id,
-            email: user?.email,
-            display_name: userProfile.displayName,
-            bio: userProfile.bio,
-            role: role,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          });
+      // Update local state with new values
+      if (profile) {
+        setProfile({
+          ...profile,
+          display_name: displayName.trim(),
+          username: username.trim().toLowerCase()
+        });
       }
-      
-      // Execute the operation
-      const { error } = await operation;
-      
-      if (error) throw error;
-      setSuccessMessage('Profile updated successfully!');
     } catch (error: any) {
       console.error('Error updating profile:', error);
-      setErrorMessage('Failed to update profile. Please try again.');
+      setError(error.message || 'Failed to update profile. Please try again.');
     } finally {
-      setSaving(false);
+      setIsSaving(false);
     }
   };
 
@@ -181,122 +181,148 @@ export default function ProfileSettings() {
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pt-20">
         <h1 className="text-3xl font-bold text-gray-900 mb-8">Profile Settings</h1>
         
-        {successMessage && (
-          <div className="mb-6 p-3 bg-green-50 text-green-700 rounded-md">
-            {successMessage}
-          </div>
-        )}
-        
-        {errorMessage && (
-          <div className="mb-6 p-3 bg-red-50 text-red-700 rounded-md">
-            {errorMessage}
-          </div>
-        )}
-
-        <div className="bg-white shadow overflow-hidden sm:rounded-lg">
+        <div className="bg-white shadow sm:rounded-lg overflow-hidden">
           <div className="px-4 py-5 sm:px-6">
-            <h2 className="text-lg font-medium text-gray-900">Personal Information</h2>
-            <p className="mt-1 text-sm text-gray-500">Update your profile information</p>
+            <h2 className="text-lg font-medium text-gray-900">User Information</h2>
+            <p className="mt-1 text-sm text-gray-500">Manage your account details</p>
           </div>
           
           <div className="border-t border-gray-200">
-            <form onSubmit={handleSubmit} className="p-6 space-y-6">
-              <div>
-                <label htmlFor="email" className="block text-sm font-medium text-gray-700">
-                  Email
-                </label>
-                <div className="mt-1">
-                  <input
-                    type="email"
-                    id="email"
-                    name="email"
-                    value={userProfile.email}
-                    disabled
-                    className="shadow-sm focus:ring-primary focus:border-primary block w-full sm:text-sm border-gray-300 rounded-md bg-gray-50"
-                  />
-                  <p className="mt-1 text-xs text-gray-500">Email cannot be changed</p>
+            <div className="px-4 py-5 sm:p-6">
+              {error && (
+                <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-md">
+                  {error}
                 </div>
-              </div>
+              )}
               
-              <div>
-                <label htmlFor="displayName" className="block text-sm font-medium text-gray-700">
-                  Display Name
-                </label>
-                <div className="mt-1">
-                  <input
-                    type="text"
-                    id="displayName"
-                    name="displayName"
-                    value={userProfile.displayName}
-                    onChange={handleChange}
-                    className="shadow-sm focus:ring-primary focus:border-primary block w-full sm:text-sm border-gray-300 rounded-md"
-                    placeholder="Your display name"
-                  />
+              {success && (
+                <div className="mb-4 p-3 bg-green-50 text-green-700 rounded-md">
+                  {success}
                 </div>
-              </div>
+              )}
               
-              <div>
-                <label htmlFor="bio" className="block text-sm font-medium text-gray-700">
-                  Bio
-                </label>
-                <div className="mt-1">
-                  <textarea
-                    id="bio"
-                    name="bio"
-                    rows={4}
-                    value={userProfile.bio}
-                    onChange={handleChange}
-                    className="shadow-sm focus:ring-primary focus:border-primary block w-full sm:text-sm border-gray-300 rounded-md"
-                    placeholder="A short bio about yourself"
-                  />
+              <form onSubmit={handleSubmit} className="space-y-6">
+                <div>
+                  <label htmlFor="email" className="block text-sm font-medium text-gray-700">
+                    Email
+                  </label>
+                  <div className="mt-1">
+                    <input
+                      id="email"
+                      type="email"
+                      value={user?.email || ''}
+                      disabled
+                      className="shadow-sm focus:ring-primary focus:border-primary block w-full sm:text-sm border-gray-300 rounded-md bg-gray-50"
+                    />
+                    <p className="mt-1 text-xs text-gray-500">Email cannot be changed</p>
+                  </div>
                 </div>
-              </div>
+                
+                <div>
+                  <label htmlFor="display_name" className="block text-sm font-medium text-gray-700">
+                    Display Name
+                  </label>
+                  <div className="mt-1">
+                    <input
+                      id="display_name"
+                      type="text"
+                      value={displayName}
+                      onChange={(e) => setDisplayName(e.target.value)}
+                      className="shadow-sm focus:ring-primary focus:border-primary block w-full sm:text-sm border-gray-300 rounded-md"
+                      placeholder="Your name"
+                    />
+                  </div>
+                </div>
+                
+                <div>
+                  <label htmlFor="username" className="block text-sm font-medium text-gray-700">
+                    Username
+                  </label>
+                  <div className="mt-1">
+                    <input
+                      id="username"
+                      type="text"
+                      value={username}
+                      onChange={(e) => setUsername(e.target.value)}
+                      className="shadow-sm focus:ring-primary focus:border-primary block w-full sm:text-sm border-gray-300 rounded-md"
+                      placeholder="username"
+                    />
+                    <p className="mt-1 text-xs text-gray-500">Only letters, numbers, and underscores</p>
+                  </div>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">
+                    Role
+                  </label>
+                  <div className="mt-1">
+                    <div className="px-4 py-2 border border-gray-300 rounded-md bg-gray-50 text-gray-700">
+                      {profile?.role === 'reviewer' ? 'Reviewer' : 'Profile Submitter'}
+                    </div>
+                    <p className="mt-1 text-xs text-gray-500">
+                      Your role can be changed on the dashboard
+                    </p>
+                  </div>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">
+                    Account Created
+                  </label>
+                  <div className="mt-1">
+                    <div className="px-4 py-2 border border-gray-300 rounded-md bg-gray-50 text-gray-700">
+                      {profile?.created_at ? new Date(profile.created_at).toLocaleDateString() : ''}
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="flex justify-between">
+                  <Link
+                    href="/dashboard"
+                    className="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none"
+                  >
+                    Cancel
+                  </Link>
+                  
+                  <button
+                    type="submit"
+                    disabled={isSaving}
+                    className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-primary hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isSaving ? 'Saving...' : 'Save Changes'}
+                  </button>
+                </div>
+              </form>
               
-              <div className="flex justify-end">
-                <Link
-                  href="/dashboard"
-                  className="mr-4 inline-flex justify-center py-2 px-4 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
-                >
-                  Cancel
-                </Link>
-                <button
-                  type="submit"
-                  disabled={saving}
-                  className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-primary hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
-                >
-                  {saving ? 'Saving...' : 'Save Changes'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-
-        <div className="mt-12 bg-white shadow overflow-hidden sm:rounded-lg">
-          <div className="px-4 py-5 sm:px-6">
-            <h2 className="text-lg font-medium text-gray-900">Account</h2>
-            <p className="mt-1 text-sm text-gray-500">Manage your account settings</p>
-          </div>
-          
-          <div className="border-t border-gray-200">
-            <div className="p-6 space-y-6">
-              <div>
-                <h3 className="text-sm font-medium text-gray-700">Account Type</h3>
-                <p className="mt-1 text-sm text-gray-900">
-                  {userRole === 'submitter' ? 'Profile Submitter' : 'Profile Reviewer'}
-                </p>
-              </div>
-              
-              <div>
-                <h3 className="text-sm font-medium text-gray-700">Change Password</h3>
-                <Link 
-                  href="/settings/password"
-                  className="mt-1 inline-flex items-center text-sm text-primary hover:text-primary/80"
-                >
-                  Update password
-                  <svg className="ml-1 h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                  </svg>
-                </Link>
+              <div className="mt-8 pt-6 border-t border-gray-200">
+                <h3 className="text-md font-medium text-gray-700 mb-4">Additional Actions</h3>
+                
+                {profile?.role === 'submitter' && (
+                  <Link
+                    href="/submit"
+                    className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 mr-3"
+                  >
+                    Update Dating Profile
+                  </Link>
+                )}
+                
+                {profile?.role === 'submitter' && (
+                  <Link
+                    href="/my-reviews"
+                    className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+                  >
+                    View My Reviews
+                  </Link>
+                )}
+                
+                {profile?.role === 'reviewer' && (
+                  <Link
+                    href="/review"
+                    className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                  >
+                    Review Profiles
+                  </Link>
+                )}
               </div>
             </div>
           </div>
