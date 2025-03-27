@@ -95,7 +95,17 @@ export default function SignupPage() {
   if (isVerificationSent) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-md w-full space-y-8">
+        <div className="fixed top-0 left-0 right-0 bg-white border-b border-gray-200 shadow-sm z-10">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+            <Link href="/" className="flex items-center group">
+              <span className="text-4xl font-bold bg-gradient-to-r from-primary via-secondary to-primary bg-clip-text text-transparent logo-gradient">
+                Vett
+              </span>
+            </Link>
+          </div>
+        </div>
+        
+        <div className="max-w-md w-full space-y-8 mt-16">
           <div>
             <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
               Check your email
@@ -122,7 +132,7 @@ export default function SignupPage() {
           </div>
 
           <div className="text-center mt-4">
-            <Link href="/login" className="text-sm text-primary hover:text-primary/90">
+            <Link href="/login" className="text-sm text-primary hover:text-primary/90 nav-link">
               Return to login
             </Link>
           </div>
@@ -133,13 +143,23 @@ export default function SignupPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
-      <div className="sm:mx-auto sm:w-full sm:max-w-md">
+      <div className="fixed top-0 left-0 right-0 bg-white border-b border-gray-200 shadow-sm z-10">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+          <Link href="/" className="flex items-center group">
+            <span className="text-4xl font-bold bg-gradient-to-r from-primary via-secondary to-primary bg-clip-text text-transparent logo-gradient">
+              Vett
+            </span>
+          </Link>
+        </div>
+      </div>
+      
+      <div className="sm:mx-auto sm:w-full sm:max-w-md mt-16">
         <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
           Create your account
         </h2>
         <p className="mt-2 text-center text-sm text-gray-600">
           Or{' '}
-          <Link href="/login" className="font-medium text-primary hover:text-primary/80">
+          <Link href="/login" className="font-medium text-primary hover:text-primary/80 nav-link">
             sign in to your account
           </Link>
         </p>

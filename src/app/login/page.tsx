@@ -1,10 +1,11 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter, useSearchParams } from 'next/navigation';
 
-export default function Login() {
+// Create a client component that uses useSearchParams
+function LoginContent() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -61,7 +62,17 @@ export default function Login() {
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
-      <div className="sm:mx-auto sm:w-full sm:max-w-md">
+      <div className="fixed top-0 left-0 right-0 bg-white border-b border-gray-200 shadow-sm z-10">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+          <Link href="/" className="flex items-center group">
+            <span className="text-4xl font-bold bg-gradient-to-r from-primary via-secondary to-primary bg-clip-text text-transparent logo-gradient">
+              Vett
+            </span>
+          </Link>
+        </div>
+      </div>
+      
+      <div className="sm:mx-auto sm:w-full sm:max-w-md mt-16">
         <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
           Sign in to your account
         </h2>
@@ -172,5 +183,14 @@ export default function Login() {
         </div>
       </div>
     </div>
+  );
+}
+
+// Export a component that wraps the content in Suspense
+export default function Login() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center">Loading...</div>}>
+      <LoginContent />
+    </Suspense>
   );
 } 
